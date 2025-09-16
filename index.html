@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>耳聞證人實驗（含干擾任務）</title>
+<style>
+  body { font-family: Arial; text-align: center; margin: 20px; }
+  .audio-btn { margin: 10px; padding: 10px 20px; font-size: 18px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>耳聞證人聲音識別實驗</h1>
+
+<!-- Step 1 -->
+<p>請先聽第一段聲音（只能播放一次），並記住它的特徵。</p>
+<audio id="audioA" src="https://github.com/bip-bipp/earwitness-experiment/raw/main/a.wav"></audio>
+<button id="playA" class="audio-btn">播放音檔 A</button>
+
+<!-- Step 2 -->
+<div id="step2" class="hidden">
+  <h2>請完成以下任務（約 10 分鐘）</h2>
+  <iframe src="https://oao0000.github.io/ospan-experiment/" width="100%" height="600px"></iframe>
+  <p id="waitMsg">任務完成後，請點選繼續（按鈕會在 5 分鐘後出現）</p>
+  <button id="continueBtn" class="audio-btn hidden">我已完成任務，繼續實驗</button>
+</div>
+
+<!-- Step 3 -->
+<div id="step3" class="hidden">
+  <h2>請聽下面 6 段聲音（每段只能播放一次，間隔 5 秒）</h2>
+  <div id="audioList"></div>
+</div>
+
+<!-- Step 4 -->
+<div id="step4" class="hidden">
+  <h2>哪一段聲音與第一階段相同？</h2>
+  <div id="choiceButtons"></div>
+</div>
+
+<script>
+let audioFiles = [
+  "https://github.com/bip-bipp/earwitness-experiment/raw/main/awb.wav",
+  "https://github.com/bip-bipp/earwitness-experiment/raw/main/bdl.wav",
+  "https://github.com/bip-bipp/earwitness-experiment/raw/main/clb%201.wav",
+  "https://github.com/bip-bipp/earwitness-experiment/raw/main/jmk.wav",
+  "https://github.com/bip-bipp/earwitness-experiment/raw/main/kps.wav",
+  "https://github.com/bip-bipp/earwitness-experiment/raw/main/rms.wav"
+];
+let shuffledOrder = [];
+let hasPlayedA = false;
+let playCount = {};
+let lastPlayTime = 0;
+
+// Step 1：播放 A
+document.getElementById("playA").addEventListener("click", function() {
+  if (!hasPlayedA) {
+    document.getElementById("audioA").play();
+    hasPlayedA = true;
+    this.disabled = true;
+    setTimeout(()=>document.getElementById("step2").classList.remove("hidden"), 1000);
+  }
+});
+
+// Step 2：延遲 5 分鐘才顯示繼續按鈕
+setTimeout(()=>document.getElementById("continueBtn").classList.remove("hidden"), 5*60*1000);
+document.getElementById("continueBtn").addEventListener("click", ()=>{
+  document.getElementById("step2").classList.add("hidden");
+  document.getElementById("step3").classList.remove("hidden");
+});
+
+// Step 3：隨機播放清單 + 5 秒冷卻
+shuffledOrder = audioFiles.sort(()=>Math.random() - 0.5);
+let listDiv = document.getElementById("audioList");
+shuffledOrder.forEach((file, index)=>{
+  let audio = document.createElement("audio");
+  audio.src = file;
+  let btn = document.createElement("button");
+  btn.innerText = `播放 ${index+1}`;
+  btn.className = "audio-btn";
+  btn.disabled = (index > 0); // 只有第一個能先按
+  btn.addEventListener("click", function(){
+    let now = Date.now();
+    if (now - lastPlayTime >= 5000) {
+      audio.play();
+      playCount[file] = true;
+      btn.disabled = true;
+      lastPlayTime = now;
+      if (Object.keys(playCount).length < shuffledOrder.length) {
+        let nextBtn = listDiv.querySelectorAll("button")[index+1];
+        if (nextBtn) setTimeout(()=>nextBtn.disabled=false, 5000);
+      } else {
+        document.getElementById("step4").classList.remove("hidden");
+      }
+    } else {
+      alert("請稍候 5 秒再播放下一個音檔！");
+    }
+  });
+  listDiv.appendChild(btn);
+});
+
+// Step 4：答題 + 上傳到 Google Sheet
+let choiceDiv = document.getElementById("choiceButtons");
+for (let i=1; i<=6; i++) {
+  let btn = document.createElement("button");
+  btn.innerText = i;
+  btn.className = "audio-btn";
+  btn.addEventListener("click", function(){
+    let participantID = "P" + Date.now();
+    let correctFile = "https://github.com/bip-bipp/earwitness-experiment/raw/main/awb.wav";
+    let correctIndex = shuffledOrder.indexOf(correctFile) + 1;
+    let correctOrNot = (i === correctIndex) ? "Correct" : "Wrong";
+
+    fetch("https://script.google.com/macros/s/AKfycbzh3Cmju_EH9uEoRw-kzGlGcbWEH_jVxk-Ynxo2omb61DYFpGFo5V5qhfWHXIQfmCQ/exec", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `ParticipantID=${participantID}&AudioOrder=${shuffledOrder.join(",")}&Response=${i}&CorrectAnswer=${correctIndex}&CorrectOrNot=${correctOrNot}`
+    })
+      .then(result => {
+      console.log("伺服器回覆:", result);
+      alert("感謝您的參與！");
+      location.reload();
+    });
+  });
+  choiceDiv.appendChild(btn);
+}
+</script>
+</body>
+</html>
+
+
